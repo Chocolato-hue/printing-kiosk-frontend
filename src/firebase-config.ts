@@ -23,4 +23,5 @@ export const auth = getAuth(app);
 // Initialize Cloud Storage and get a reference to the service
 export const storage = getStorage(app);
 
+
 export const db = getFirestore(app);   // 🔹 this is what you were missing
