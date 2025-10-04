@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import { Upload, X, Image as ImageIcon, Check } from 'lucide-react';
-const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
 interface ImageUploadProps {
   onFileUpload: (file: File) => void;
@@ -13,38 +12,41 @@ interface ImageUploadProps {
 const ImageUpload: React.FC<ImageUploadProps> = ({ onFileUpload, uploadedFile, imageUrl, onRemoveFile, onImageLoad }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+
+
   const MAX_FILE_SIZE_MB = 10;
 
-const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-    setErrorMessage(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`);
-    return;
-  }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setErrorMessage(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`);
+      return;
+    }
 
-  if (file.type.startsWith('image/')) {
-    setErrorMessage(null); // clear any previous error
-    onFileUpload(file);
-  }
-};
+    if (file.type.startsWith('image/')) {
+      setErrorMessage(null); // clear any previous error
+      onFileUpload(file);
+    }
+  };
 
-const handleDrop = (e: React.DragEvent) => {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
 
-  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-    setErrorMessage(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`);
-    return;
-  }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setErrorMessage(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`);
+      return;
+    }
 
-  if (file.type.startsWith('image/')) {
-    setErrorMessage(null);
-    onFileUpload(file);
-  }
-};
+    if (file.type.startsWith('image/')) {
+      setErrorMessage(null);
+      onFileUpload(file);
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
