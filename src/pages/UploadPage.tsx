@@ -54,11 +54,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
   const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  // Track upload completion
+  const [uploadCompleted, setUploadCompleted] = useState(false);
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
 
     try {
+      setUploadCompleted(false); // reset
       const fileRef = ref(storage, `printJobs/${Date.now()}-${file.name}`);
       const uploadTask = uploadBytesResumable(fileRef, file);
 
@@ -70,11 +73,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
         },
         (error) => {
           console.error("Upload failed:", error);
+          alert("File upload failed. Please try again.");
         },
         async () => {
           const url = await getDownloadURL(uploadTask.snapshot.ref);
           setUploadedFile(file);
-          setImageUrl(url); // ✅ Firebase Storage URL
+          setImageUrl(url);
+          setUploadCompleted(true);
+          console.log("✅ Upload completed. Firebase URL:", url);
         }
       );
     } catch (err) {
@@ -90,6 +96,14 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
 
   const handleProceedToPayment = () => {
     if (!uploadedFile || !selectedSize) return;
+    if (!uploadCompleted) {
+      alert("Please wait until the upload is complete.");
+      return;
+    }
+    if (!imageUrl) {
+      alert("Error: Image URL not ready. Cannot proceed.");
+      return;
+    }
     setShowPayment(true);
   };
 
@@ -99,6 +113,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
     try {
       // ✅ Get printer ID dynamically
       const printerId = getConnectedPrinter();
+      console.log("🖨️ Using printer ID:", printerId);
 
       // 1. Save job into Firestore
       const jobRef = await addDoc(collection(db, "printJobs"), {
@@ -113,6 +128,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
         createdAt: serverTimestamp()
       });
 
+      console.log("✅ Job created in Firestore:", jobRef.id);
       // 2. Build local order object for UI
       const order: PrintOrder = {
         id: jobRef.id,   // Firestore doc ID is now the jobId
@@ -261,6 +277,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
                 
                 <button
                   onClick={handleProceedToPayment}
+                  disabled={!uploadCompleted} // ✅ disable until upload finishes
                   //disabled={!isResolutionSufficient(selectedSize)} = can print despite low resolution
                   className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >

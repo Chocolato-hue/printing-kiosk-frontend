@@ -101,7 +101,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileUpload, uploadedFile, i
               onLoad={(e) => {
                 const img = e.target as HTMLImageElement;
                 onImageLoad?.({ width: img.naturalWidth, height: img.naturalHeight });
+                console.log("🖼️ Image loaded. Resolution:", img.naturalWidth, "x", img.naturalHeight);
               }}
+              onError={() => setErrorMessage("Failed to load image preview.")}
             />
             <button
               onClick={removeFile}
