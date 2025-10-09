@@ -3,9 +3,20 @@
 import { db } from "../firebase-config";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-// 🔌 Get currently connected printer from environment variable
-export function getConnectedPrinter(): string {
-  return process.env.NEXT_PUBLIC_PRINTER_ID || "default-printer";
+// 🔍 Dynamically fetch printer ID from backend
+export async function getConnectedPrinter(): Promise<string> {
+  try {
+    // You can replace localhost with your Dell backend’s local IP (or Netlify backend proxy URL)
+    const res = await fetch("http://localhost:3001/status");
+    const data = await res.json();
+    if (data.printerId) {
+      console.log("🖨️ Detected printer:", data.printerId);
+      return data.printerId;
+    }
+  } catch (err) {
+    console.warn("⚠️ Could not reach printer backend, fallback to default.");
+  }
+  return "default-printer";
 }
 
 // 🌐 Submit print job to Firestore
@@ -20,12 +31,15 @@ export async function submitPrintJob(
     margins?: { left?: number; right?: number; top?: number; bottom?: number };
     fitToPage?: boolean;
   },
-  printerId: string = getConnectedPrinter()
+  printerId?: string
 ): Promise<string> {
   try {
+    // If no printerId passed, fetch it dynamically
+    const finalPrinterId = printerId || (await getConnectedPrinter());
+
     const jobRef = await addDoc(collection(db, "printJobs"), {
       imageUrl,
-      printerId,
+      printerId: finalPrinterId,
       options,
       status: "pending",
       createdAt: serverTimestamp(),

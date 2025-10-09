@@ -8,12 +8,11 @@ import PaymentModal from '../components/PaymentModal';
 import PrintModal from '../components/PrintModal';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
-import { addDoc, collection, serverTimestamp, query, where, orderBy, getDocs } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase-config";  // make sure db is exported from firebase-config.ts
 import { getConnectedPrinter } from '../services/PrinterService';
 
 // ...
-
 interface UploadPageProps {
   user: User | null;
   onBack: () => void;
@@ -111,39 +110,37 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
     if (!uploadedFile || !selectedSize || !user) return;
 
     try {
-      // ✅ Get printer ID dynamically
-      const printerId = getConnectedPrinter();
+      // 🔹 Get printer ID (from Dell backend or env)
+      const printerId = await getConnectedPrinter();
       console.log("🖨️ Using printer ID:", printerId);
 
-      // 1. Save job into Firestore
+      // 🔹 Verify printer exists in Firestore
+      const printerRef = doc(db, "printers", printerId);
+      const printerSnap = await getDoc(printerRef);
+
+      if (!printerSnap.exists()) {
+        alert(`Printer ${printerId} is not registered in Firestore!`);
+        return;
+      }
+
+      // 🔹 Add print job to Firestore
       const jobRef = await addDoc(collection(db, "printJobs"), {
-        userId: user.uid, // from Firebase Auth
+        userId: user.uid,
         fileName: uploadedFile.name,
-        imageUrl,  // URL from Firebase Storage
+        imageUrl,
         printSize: selectedSize.id,
         quantity,
         totalPrice,
-        printerId, // use dynamic printer ID
+        printerId, // ✅ now guaranteed to exist
         status: "pending",
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
       });
 
       console.log("✅ Job created in Firestore:", jobRef.id);
-      // 2. Build local order object for UI
-      const order: PrintOrder = {
-        id: jobRef.id,   // Firestore doc ID is now the jobId
-        imageFile: uploadedFile,
-        imageUrl,
-        printSize: selectedSize,
-        quantity,
-        totalPrice
-      };
 
-      setCompletedOrder(order);
-      setShowPayment(false);
-      setShowPrint(true);
+      // (your existing cleanup or success logic here, e.g. reset states, show message)
+      alert("✅ Your print job was successfully created!");
 
-      console.log("✅ Job created in Firestore:", jobRef.id);
     } catch (err) {
       console.error("❌ Error creating print job:", err);
       alert("Could not create print job. Please try again.");
