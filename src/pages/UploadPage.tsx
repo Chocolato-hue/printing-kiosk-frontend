@@ -8,7 +8,7 @@ import PaymentModal from '../components/PaymentModal';
 import PrintModal from '../components/PrintModal';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
-import { addDoc, collection, serverTimestamp, query, where, orderBy, getDocs, doc, getDoc } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, query, where, orderBy, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase-config";  // make sure db is exported from firebase-config.ts
 import { getConnectedPrinter } from '../services/PrinterService';
 

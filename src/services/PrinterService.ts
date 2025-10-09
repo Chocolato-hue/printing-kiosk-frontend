@@ -1,20 +1,25 @@
 // src/services/PrinterService.ts
 
 import { db } from "../firebase-config";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 
-// 🔍 Dynamically fetch printer ID from backend
-export async function getConnectedPrinter(): Promise<string> {
+// 🔍 Fetch all available printers from Firestore.
+export async function fetchAvailablePrinters(): Promise<any[]> {
   try {
-    // You can replace localhost with your Dell backend’s local IP (or Netlify backend proxy URL)
-    const res = await fetch("http://localhost:3001/status");
-    const data = await res.json();
-    if (data.printerId) {
-      console.log("🖨️ Detected printer:", data.printerId);
-      return data.printerId;
-    }
+    const snapshot = await getDocs(collection(db, "printers"));
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
   } catch (err) {
-    console.warn("⚠️ Could not reach printer backend, fallback to default.");
+    console.error("❌ Failed to fetch printers:", err);
+    return [];
+  }
+}
+// 🖨️ Get selected printer ID from local storage (if user already picked one)
+export function getConnectedPrinter(): string {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("selectedPrinter") || "default-printer";
   }
   return "default-printer";
 }
@@ -34,8 +39,8 @@ export async function submitPrintJob(
   printerId?: string
 ): Promise<string> {
   try {
-    // If no printerId passed, fetch it dynamically
-    const finalPrinterId = printerId || (await getConnectedPrinter());
+    // If no printerId passed, get from local storage
+    const finalPrinterId = printerId || getConnectedPrinter();
 
     const jobRef = await addDoc(collection(db, "printJobs"), {
       imageUrl,
