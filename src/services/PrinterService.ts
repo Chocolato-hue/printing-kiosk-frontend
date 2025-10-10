@@ -3,7 +3,7 @@
 import { db } from "../firebase-config";
 import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 
-// 🔍 Fetch all available printers from Firestore.
+// 🔍 Fetch all available printers from Firestore
 export async function fetchAvailablePrinters(): Promise<any[]> {
   try {
     const snapshot = await getDocs(collection(db, "printers"));
@@ -16,7 +16,8 @@ export async function fetchAvailablePrinters(): Promise<any[]> {
     return [];
   }
 }
-// 🖨️ Get selected printer ID from local storage (if user already picked one)
+
+// 🖨️ Get selected printer ID from local storage
 export function getConnectedPrinter(): string {
   if (typeof window !== "undefined") {
     return localStorage.getItem("selectedPrinter") || "default-printer";
@@ -39,11 +40,29 @@ export async function submitPrintJob(
   printerId?: string
 ): Promise<string> {
   try {
-    // If no printerId passed, get from local storage
+    // ✅ Get the selected printer ID
     const finalPrinterId = printerId || getConnectedPrinter();
 
+    // ✅ Retrieve exact storage path from localStorage
+    const storagePath =
+      typeof window !== "undefined"
+        ? localStorage.getItem("lastStoragePath")
+        : null;
+
+    if (!storagePath) {
+      throw new Error(
+        "Missing storagePath — please upload a file before submitting a print job."
+      );
+    }
+
+    // ✅ Extract filename from path
+    const fileName = storagePath.split("/").pop() || "unknown.jpg";
+
+    // ✅ Create Firestore print job record
     const jobRef = await addDoc(collection(db, "printJobs"), {
-      imageUrl,
+      imageUrl,              // for user preview
+      fileName,              // readable filename
+      storagePath,           // exact path in Firebase Storage
       printerId: finalPrinterId,
       options,
       status: "pending",
@@ -51,6 +70,7 @@ export async function submitPrintJob(
     });
 
     console.log("✅ Print job created in Firestore:", jobRef.id);
+    console.log("📦 Using storagePath:", storagePath);
     return jobRef.id;
   } catch (err) {
     console.error("❌ Failed to create print job:", err);
@@ -58,11 +78,10 @@ export async function submitPrintJob(
   }
 }
 
-// Optional: simple health check for Firestore connectivity
+// 🧠 Optional: simple Firestore health check
 export async function checkHealth(): Promise<boolean> {
   try {
-    // Try to add a small test doc then delete it
-    const testRef = await addDoc(collection(db, "_healthCheck"), {
+    await addDoc(collection(db, "_healthCheck"), {
       timestamp: serverTimestamp(),
     });
     console.log("✅ Firestore is reachable");

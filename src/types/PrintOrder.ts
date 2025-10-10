@@ -16,4 +16,6 @@ export interface PrintOrder {
   printSize: PrintSize;
   quantity: number;
   totalPrice: number;
+  printerId?: string;  // 🔹 optional because added later
+  jobId?: string;      // 🔹 fixes the error
 }

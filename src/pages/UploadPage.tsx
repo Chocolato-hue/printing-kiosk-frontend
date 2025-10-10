@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Upload, Camera, AlertCircle, Check, X } from 'lucide-react';
 import { User } from '../types/User';
 import { PrintSize, PrintOrder } from '../types/PrintOrder';
@@ -10,7 +10,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
 import { addDoc, collection, serverTimestamp, query, where, orderBy, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase-config";  // make sure db is exported from firebase-config.ts
-import { getConnectedPrinter } from '../services/PrinterService';
+import { submitPrintJob, getConnectedPrinter, fetchAvailablePrinters } from '../services/PrinterService';
 
 // ...
 interface UploadPageProps {
@@ -53,14 +53,33 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
   const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  // 🔽 Printer selection states
+  const [printers, setPrinters] = useState<any[]>([]);
+  const [selectedPrinter, setSelectedPrinter] = useState<string>("");
+
   // Track upload completion
   const [uploadCompleted, setUploadCompleted] = useState(false);
+
+  // 🖨️ Load available printers from Firestore
+  useEffect(() => {
+    async function loadPrinters() {
+      const printerList = await fetchAvailablePrinters();
+      setPrinters(printerList);
+
+      // Restore previously selected printer (if user picked one before)
+      const saved = localStorage.getItem("selectedPrinter");
+      if (saved) setSelectedPrinter(saved);
+    }
+    loadPrinters();
+  }, []);
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
 
     try {
       setUploadCompleted(false); // reset
+
+      // 🔹 Generate unique file reference in Firebase Storage
       const fileRef = ref(storage, `printJobs/${Date.now()}-${file.name}`);
       const uploadTask = uploadBytesResumable(fileRef, file);
 
@@ -71,19 +90,29 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
           setUploadProgress(progress);
         },
         (error) => {
-          console.error("Upload failed:", error);
+          console.error("❌ Upload failed:", error);
           alert("File upload failed. Please try again.");
         },
         async () => {
+          // ✅ Get both the download URL and the full path
           const url = await getDownloadURL(uploadTask.snapshot.ref);
+          const fullPath = uploadTask.snapshot.ref.fullPath; // e.g. "printJobs/1760003076263-stickman.jpg"
+
+          // 🔹 Save info locally so PrinterService can access it later
+          localStorage.setItem("lastStoragePath", fullPath);
+
+          // 🔹 Update React states
           setUploadedFile(file);
           setImageUrl(url);
           setUploadCompleted(true);
-          console.log("✅ Upload completed. Firebase URL:", url);
+
+          console.log("✅ Upload completed:");
+          console.log("   • Firebase URL:", url);
+          console.log("   • Storage Path:", fullPath);
         }
       );
     } catch (err) {
-      console.error(err);
+      console.error("❌ Unexpected error during upload:", err);
     }
   };
 
@@ -107,45 +136,55 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
   };
 
   const handlePaymentSuccess = async () => {
-    if (!uploadedFile || !selectedSize || !user) return;
-
-    try {
-      // 🔹 Get printer ID (from Dell backend or env)
-      const printerId = await getConnectedPrinter();
-      console.log("🖨️ Using printer ID:", printerId);
-
-      // 🔹 Verify printer exists in Firestore
-      const printerRef = doc(db, "printers", printerId);
-      const printerSnap = await getDoc(printerRef);
-
-      if (!printerSnap.exists()) {
-        alert(`Printer ${printerId} is not registered in Firestore!`);
-        return;
-      }
-
-      // 🔹 Add print job to Firestore
-      const jobRef = await addDoc(collection(db, "printJobs"), {
-        userId: user.uid,
-        fileName: uploadedFile.name,
-        imageUrl,
-        printSize: selectedSize.id,
-        quantity,
-        totalPrice,
-        printerId, // ✅ now guaranteed to exist
-        status: "pending",
-        createdAt: serverTimestamp(),
-      });
-
-      console.log("✅ Job created in Firestore:", jobRef.id);
-
-      // (your existing cleanup or success logic here, e.g. reset states, show message)
-      alert("✅ Your print job was successfully created!");
-
-    } catch (err) {
-      console.error("❌ Error creating print job:", err);
-      alert("Could not create print job. Please try again.");
+  try {
+    // 🖨️ 1️⃣ Get currently selected printer
+    const printerId = getConnectedPrinter(); // from PrinterService.ts
+    if (!printerId || printerId === "default-printer") {
+      alert("⚠️ Please select a printer before payment!");
+      return;
     }
-  };
+
+    // 🔍 2️⃣ Check Firestore if printer actually exists
+    const printerRef = doc(db, "printers", printerId);
+    const printerSnap = await getDoc(printerRef);
+
+    if (!printerSnap.exists()) {
+      alert(`❌ Printer ${printerId} is not registered in Firestore!`);
+      return;
+    }
+
+    console.log(`🖨️ Printer ${printerId} verified in Firestore.`);
+
+    // 🧾 3️⃣ Prepare print job options
+    const options = {
+      copies: quantity,
+      size: selectedSize?.name || "Unknown",
+      fitToPage: true,
+    };
+
+    // 🪄 4️⃣ Create Firestore job
+    const jobId = await submitPrintJob(imageUrl, options, printerId);
+    console.log(`✅ Print job created successfully with ID: ${jobId}`);
+
+    // 💾 5️⃣ (Optional) Save last used printer for next time
+    localStorage.setItem("selectedPrinter", printerId);
+
+    // 🎉 6️⃣ Proceed to print modal or confirmation
+    setShowPayment(false);
+    setCompletedOrder(prev => {
+      if (!prev) return prev; // ⛔ nothing to update if null
+      return {
+        ...prev,
+        jobId,
+        printerId,
+      };
+    });
+    setShowPrint(true);
+  } catch (err) {
+    console.error("❌ Payment succeeded, but job creation failed:", err);
+    alert("Something went wrong while creating the print job. Please try again.");
+  }
+};
 
   const handlePrintComplete = () => {
     setShowPrint(false);
@@ -250,6 +289,38 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
                 </div>
               </div>
             )}
+
+            {/* 🖨️ Printer selection dropdown */}
+            {selectedSize && (
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <h3 className="font-semibold text-gray-900 mb-4">Select Printer</h3>
+                <div className="space-y-2">
+                  <select
+                    value={selectedPrinter}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedPrinter(id);
+                      localStorage.setItem("selectedPrinter", id);
+                    }}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                  >
+                    <option value="">-- Choose Printer --</option>
+                    {printers.map((printer) => (
+                      <option key={printer.id} value={printer.id}>
+                        {printer.name || printer.id}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedPrinter && (
+                    <p className="text-sm text-gray-600">
+                      Selected printer: <span className="font-medium text-gray-900">{selectedPrinter}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
 
             {/* Order Summary */}
             {uploadedFile && selectedSize && (
