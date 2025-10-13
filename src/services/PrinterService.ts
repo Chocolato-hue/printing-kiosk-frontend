@@ -63,11 +63,13 @@ export async function submitPrintJob(
       imageUrl,              // for user preview
       fileName,              // readable filename
       storagePath,           // exact path in Firebase Storage
-      printerId: finalPrinterId,
+      printerId: finalPrinterId,  // ✅ keep this
       options,
+      paperSize: options.size,     // ✅ add this new line
       status: "pending",
       createdAt: serverTimestamp(),
     });
+
 
     console.log("✅ Print job created in Firestore:", jobRef.id);
     console.log("📦 Using storagePath:", storagePath);
