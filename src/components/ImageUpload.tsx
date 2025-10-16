@@ -6,58 +6,70 @@ interface ImageUploadProps {
   uploadedFile: File | null;
   imageUrl: string;
   onRemoveFile: () => void;
+  onDeleteFromStorage?: (path: string) => void; // <-- new optional prop
   onImageLoad?: (resolution: { width: number; height: number }) => void;
 }
 
-const ImageUpload: React.FC<ImageUploadProps> = ({ onFileUpload, uploadedFile, imageUrl, onRemoveFile, onImageLoad }) => {
+const ImageUpload: React.FC<ImageUploadProps> = ({ onFileUpload, uploadedFile, imageUrl, onRemoveFile,onDeleteFromStorage, onImageLoad }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
+  const MAX_FILE_SIZE_MB = 2;
 
-  const MAX_FILE_SIZE_MB = 10;
-
+  // For file input
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      setErrorMessage(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`);
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('❌ Only image files are allowed.');
       return;
     }
 
-    if (file.type.startsWith('image/')) {
-      setErrorMessage(null); // clear any previous error
-      onFileUpload(file);
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setErrorMessage(`⚠️ File exceeds ${MAX_FILE_SIZE_MB} MB and will be compressed.`);
+    } else {
+      setErrorMessage(null);
     }
+
+    onFileUpload(file); // always call parent
   };
 
+  // For drag & drop
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      setErrorMessage(`File exceeds ${MAX_FILE_SIZE_MB}MB limit`);
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('❌ Only image files are allowed.');
       return;
     }
 
-    if (file.type.startsWith('image/')) {
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setErrorMessage(`⚠️ File exceeds ${MAX_FILE_SIZE_MB} MB and will be compressed.`);
+    } else {
       setErrorMessage(null);
-      onFileUpload(file);
     }
+
+    onFileUpload(file); // always call parent
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
   const removeFile = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    onRemoveFile?.();
-  };
+  if (fileInputRef.current) {
+    fileInputRef.current.value = '';
+  }
+  onRemoveFile?.();
+
+  // ✅ Retrieve the exact fullPath stored during upload
+  const storedPath = localStorage.getItem("lastStoragePath");
+  if (onDeleteFromStorage && storedPath) {
+    onDeleteFromStorage(storedPath);
+    localStorage.removeItem("lastStoragePath"); // cleanup after delete
+  }
+};
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -76,7 +88,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileUpload, uploadedFile, i
               <p className="text-lg font-medium text-gray-900">Drop your image here</p>
               <p className="text-gray-600">or click to browse</p>
             </div>
-            <p className="text-sm text-gray-500">Supports: JPG, PNG, GIF (Max 10MB)</p>
+            <p className="text-sm text-gray-500">Supports: JPG, PNG, GIF (Max 2MB)</p>
           </div>
           
           <input

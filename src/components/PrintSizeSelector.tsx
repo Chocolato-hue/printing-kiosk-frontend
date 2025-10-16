@@ -75,7 +75,7 @@ const PrintSizeSelector: React.FC<PrintSizeSelectorProps> = ({
               </div>
               
               {imageResolution && !sufficient && (
-                <div className="mt-3 text-sm text-red-600">
+                <div className="mt-3 text-sm text-yellow-600">
                   Current resolution: {imageResolution.width}×{imageResolution.height}px - Too low for quality printing
                 </div>
               )}

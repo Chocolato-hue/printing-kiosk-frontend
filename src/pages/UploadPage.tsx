@@ -6,7 +6,7 @@ import ImageUpload from '../components/ImageUpload';
 import PrintSizeSelector from '../components/PrintSizeSelector';
 import PaymentModal from '../components/PaymentModal';
 import PrintModal from '../components/PrintModal';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject} from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
 import { addDoc, collection, serverTimestamp, query, where, orderBy, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase-config";  // make sure db is exported from firebase-config.ts
@@ -18,34 +18,27 @@ interface UploadPageProps {
   onBack: () => void;
 }
 
+// ✅ Force frontend to only allow A5 prints
 const printSizes: PrintSize[] = [
-  {
-    id: '4x6',
-    name: '4x6 Photo',
-    dimensions: '4" × 6"',
-    price: 0.29,
-    minResolution: { width: 1200, height: 1800 }
-  },
   {
     id: 'a5',
     name: 'A5 Print',
     dimensions: '5.8" × 8.3"',
     price: 1.99,
-    minResolution: { width: 1748, height: 2480 }
-  },
-  {
-    id: 'a4',
-    name: 'A4 Print',
-    dimensions: '8.3" × 11.7"',
-    price: 3.49,
-    minResolution: { width: 2480, height: 3508 }
+    minResolution: { width: 1160, height: 1654 }
   }
 ];
 
 const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
-  const [selectedSize, setSelectedSize] = useState<PrintSize | null>(null);
+  const [selectedSize, setSelectedSize] = useState<PrintSize | null>({
+    id: 'a5',
+    name: 'A5 Print',
+    dimensions: '5.8" × 8.3"',
+    price: 1.99,
+    minResolution: { width: 1160, height: 1654 }
+  });
   const [quantity, setQuantity] = useState(1);
   const [showPayment, setShowPayment] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
@@ -59,6 +52,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
 
   // Track upload completion
   const [uploadCompleted, setUploadCompleted] = useState(false);
+  const [compressionNotice, setCompressionNotice] = useState<string>('');
 
   // 🖨️ Load available printers from Firestore
   useEffect(() => {
@@ -73,46 +67,99 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
     loadPrinters();
   }, []);
 
+  const MAX_FILE_SIZE_MB = 2;
+  const MAX_WIDTH = 1748;
+  const MAX_HEIGHT = 2480;
+
+  const compressImageIfNeeded = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        if (!e.target) return reject("FileReader error");
+        img.src = e.target.result as string;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+
+      img.onload = () => {
+        let { width, height } = img;
+
+        // Resize proportionally if too big
+        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+          const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+          width = width * ratio;
+          height = height * ratio;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject("Canvas context error");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.95;
+
+        const tryCompress = () => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return reject("Canvas toBlob error");
+              const sizeMB = blob.size / 1024 / 1024;
+
+              if ((sizeMB > MAX_FILE_SIZE_MB || width > MAX_WIDTH || height > MAX_HEIGHT) && quality > 0.5) {
+                quality -= 0.05;
+                tryCompress();
+              } else {
+                resolve(new File([blob], file.name, { type: file.type }));
+              }
+            },
+            file.type,
+            quality
+          );
+        };
+
+        tryCompress();
+      };
+
+      img.onerror = (err) => reject(err);
+    });
+  };
+
   const handleFileUpload = async (file: File) => {
     if (!file) return;
-
     try {
-      setUploadCompleted(false); // reset
+      setUploadCompleted(false);
 
-      // 🔹 Generate unique file reference in Firebase Storage
-      const fileRef = ref(storage, `printJobs/${Date.now()}-${file.name}`);
-      const uploadTask = uploadBytesResumable(fileRef, file);
+      const processedFile = await compressImageIfNeeded(file);
+
+      if (processedFile.size < file.size) {
+        setCompressionNotice(
+          `⚠️ Your image was compressed to fit size/resolution limits (max ${MAX_FILE_SIZE_MB} MB, ${MAX_WIDTH}×${MAX_HEIGHT}). Quality may be slightly reduced.`
+        );
+      } else {
+        setCompressionNotice('');
+      }
+
+      // Continue with upload to Firebase Storage...
+      const fileRef = ref(storage, `printJobs/${Date.now()}-${processedFile.name}`);
+      const uploadTask = uploadBytesResumable(fileRef, processedFile);
 
       uploadTask.on(
         "state_changed",
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-        },
-        (error) => {
-          console.error("❌ Upload failed:", error);
-          alert("File upload failed. Please try again.");
-        },
+        (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
+        (error) => console.error("Upload failed:", error),
         async () => {
-          // ✅ Get both the download URL and the full path
           const url = await getDownloadURL(uploadTask.snapshot.ref);
-          const fullPath = uploadTask.snapshot.ref.fullPath; // e.g. "printJobs/1760003076263-stickman.jpg"
-
-          // 🔹 Save info locally so PrinterService can access it later
-          localStorage.setItem("lastStoragePath", fullPath);
-
-          // 🔹 Update React states
-          setUploadedFile(file);
+          setUploadedFile(processedFile);
           setImageUrl(url);
           setUploadCompleted(true);
-
-          console.log("✅ Upload completed:");
-          console.log("   • Firebase URL:", url);
-          console.log("   • Storage Path:", fullPath);
+          localStorage.setItem("lastStoragePath", uploadTask.snapshot.ref.fullPath); // save full path
         }
       );
     } catch (err) {
-      console.error("❌ Unexpected error during upload:", err);
+      console.error("Unexpected error during upload:", err);
     }
   };
 
@@ -234,7 +281,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Upload Section */}
           <div className="space-y-6">
-            <ImageUpload 
+            <ImageUpload
               onFileUpload={handleFileUpload}
               uploadedFile={uploadedFile}
               imageUrl={imageUrl}
@@ -242,6 +289,17 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
                 setUploadedFile(null);
                 setImageUrl('');
                 setImageResolution(null);
+                setCompressionNotice(''); // ✅ reset warning
+              }}
+              onDeleteFromStorage={async (filePath: string) => {
+                if (!filePath) return;
+                try {
+                  const storageRef = ref(storage, filePath);
+                  await deleteObject(storageRef);
+                  console.log('✅ File deleted from Firebase storage');
+                } catch (err) {
+                  console.error('❌ Failed to delete from storage:', err);
+                }
               }}
               onImageLoad={setImageResolution}
             />
@@ -255,6 +313,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
                 <p className="text-gray-600">
                   File size: {uploadedFile ? (uploadedFile.size / 1024 / 1024).toFixed(2) : 0} MB
                 </p>
+              </div>
+            )}
+            {/* ⚠️ Compression notice */}
+            {compressionNotice && (
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start space-x-2">
+                <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
+                <p className="text-yellow-700 text-sm">{compressionNotice}</p>
               </div>
             )}
           </div>
@@ -353,13 +418,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
                 </button>
 
                 {!isResolutionSufficient(selectedSize) && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
-                    <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+                  <div className="mt-3 p-3 bg-yellow-50 border border-red-200 rounded-lg flex items-start space-x-2">
+                    <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
                     <div>
-                      <p className="text-red-700 font-medium">Resolution too low</p>
-                      <p className="text-red-600 text-sm">
-                        This image resolution is too low for quality {selectedSize.name} printing. 
-                        Please upload a higher resolution image.
+                      <p className="text-yellow-700 font-medium">Notice: Slightly low resolution</p>
+                      <p className="text-yellow-600 text-sm">
+                        Your image is slightly below the recommended resolution for {selectedSize.name} printing, 
+                        but it can still be printed. Quality may be slightly reduced.
                       </p>
                     </div>
                   </div>
