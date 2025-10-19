@@ -379,7 +379,10 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
 
                   {selectedPrinter && (
                     <p className="text-sm text-gray-600">
-                      Selected printer: <span className="font-medium text-gray-900">{selectedPrinter}</span>
+                      Selected printer:{" "}
+                      <span className="font-medium text-gray-900">
+                        {printers.find(p => p.id === selectedPrinter)?.name || selectedPrinter}
+                      </span>
                     </p>
                   )}
                 </div>
