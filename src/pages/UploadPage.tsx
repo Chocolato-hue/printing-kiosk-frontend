@@ -4,18 +4,16 @@ import { User } from '../types/User';
 import { PrintSize, PrintOrder } from '../types/PrintOrder';
 import ImageUpload from '../components/ImageUpload';
 import PrintSizeSelector from '../components/PrintSizeSelector';
-import PaymentModal from '../components/PaymentModal';
 import PrintModal from '../components/PrintModal';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject} from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
-import { addDoc, collection, serverTimestamp, query, where, orderBy, doc, getDoc } from "firebase/firestore";
-import { db } from "../firebase-config";  // make sure db is exported from firebase-config.ts
 import { submitPrintJob, getConnectedPrinter, fetchAvailablePrinters } from '../services/PrinterService';
 
 // ...
 interface UploadPageProps {
   user: User | null;
   onBack: () => void;
+  onProceedToLayout: () => void; // 👈 add this line
 }
 
 // ✅ Force frontend to only allow A5 prints
@@ -29,7 +27,7 @@ const printSizes: PrintSize[] = [
   }
 ];
 
-const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
+const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<PrintSize | null>({
@@ -40,7 +38,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
     minResolution: { width: 1160, height: 1654 }
   });
   const [quantity, setQuantity] = useState(1);
-  const [showPayment, setShowPayment] = useState(false);
+  // const [showPayment, setShowPayment] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<PrintOrder | null>(null);
   const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
@@ -179,59 +177,13 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
       alert("Error: Image URL not ready. Cannot proceed.");
       return;
     }
-    setShowPayment(true);
+    // ✅ Save upload data so the next page (LayoutSelectionPage) can access it
+    localStorage.setItem("uploadedImageUrl", imageUrl);
+    localStorage.setItem("uploadedFileName", uploadedFile?.name || "");
+
+    // ✅ Move to layout selection page instead of payment
+    onProceedToLayout();
   };
-
-  const handlePaymentSuccess = async () => {
-  try {
-    // 🖨️ 1️⃣ Get currently selected printer
-    const printerId = getConnectedPrinter(); // from PrinterService.ts
-    if (!printerId || printerId === "default-printer") {
-      alert("⚠️ Please select a printer before payment!");
-      return;
-    }
-
-    // 🔍 2️⃣ Check Firestore if printer actually exists
-    const printerRef = doc(db, "printers", printerId);
-    const printerSnap = await getDoc(printerRef);
-
-    if (!printerSnap.exists()) {
-      alert(`❌ Printer ${printerId} is not registered in Firestore!`);
-      return;
-    }
-
-    console.log(`🖨️ Printer ${printerId} verified in Firestore.`);
-
-    // 🧾 3️⃣ Prepare print job options
-    const options = {
-      copies: quantity,
-      size: selectedSize?.name || "Unknown",
-      fitToPage: true,
-    };
-
-    // 🪄 4️⃣ Create Firestore job
-    const jobId = await submitPrintJob(imageUrl, options, printerId);
-    console.log(`✅ Print job created successfully with ID: ${jobId}`);
-
-    // 💾 5️⃣ (Optional) Save last used printer for next time
-    localStorage.setItem("selectedPrinter", printerId);
-
-    // 🎉 6️⃣ Proceed to print modal or confirmation
-    setShowPayment(false);
-    setCompletedOrder(prev => {
-      if (!prev) return prev; // ⛔ nothing to update if null
-      return {
-        ...prev,
-        jobId,
-        printerId,
-      };
-    });
-    setShowPrint(true);
-  } catch (err) {
-    console.error("❌ Payment succeeded, but job creation failed:", err);
-    alert("Something went wrong while creating the print job. Please try again.");
-  }
-};
 
   const handlePrintComplete = () => {
     setShowPrint(false);
@@ -417,7 +369,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
                   //disabled={!isResolutionSufficient(selectedSize)} = can print despite low resolution
                   className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Proceed to Payment
+                  Continue to Layout Selection
                 </button>
 
                 {!isResolutionSufficient(selectedSize) && (
@@ -438,7 +390,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
         </div>
       </div>
 
-      {/* Payment Modal */}
+      {/*Payment Modal 
       {showPayment && selectedSize && uploadedFile && (
         <PaymentModal
           order={{
@@ -452,7 +404,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack }) => {
           onClose={() => setShowPayment(false)}
           onSuccess={handlePaymentSuccess}
         />
-      )}
+      )}*/}
 
       {/* Print Modal */}
       {showPrint && completedOrder && (

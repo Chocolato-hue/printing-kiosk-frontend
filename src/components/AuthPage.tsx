@@ -5,7 +5,7 @@ import { auth } from '../firebase-config'; // Import the auth object
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
-  updateProfile 
+  updateProfile, sendPasswordResetEmail
 } from 'firebase/auth';
 
 interface AuthPageProps {
@@ -17,7 +17,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -26,57 +26,103 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setError(null);
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
 
-  // Client-side validation for password match on sign up
-  if (isSignUp && formData.password !== formData.confirmPassword) {
-    setError("Passwords do not match.");
-    setLoading(false);
-    return;
-  }
+  const normalizedEmail = formData.email.trim().toLowerCase();
 
-  try {
-    if (isSignUp) {
-      // Sign up with Firebase
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-      // Set user's display name
-      await updateProfile(userCredential.user, {
-        displayName: formData.name || formData.email.split('@')[0],
-      });
-      const user: User = {
-        uid: userCredential.user.uid,
-        email: userCredential.user.email!,
-        name: userCredential.user.displayName || formData.email.split('@')[0],
-      };
-      onLogin(user);
-    } else {
-      // Sign in with Firebase
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-      const user: User = {
-        uid: userCredential.user.uid,
-        email: userCredential.user.email!,
-        name: userCredential.user.displayName || userCredential.user.email!.split('@')[0],
-      };
-      onLogin(user);
-    }
-  } catch (err: any) {
-    console.error(err);
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
+  // ✅ Username validation
+  if (isSignUp) {
+    if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+      setError("Username can only contain letters, numbers, and underscores.");
+      setLoading(false);
+      return;
+    }
+  }
+
+  // ✅ Password match validation
+  if (isSignUp && formData.password !== formData.confirmPassword) {
+    setError("Passwords do not match.");
+    setLoading(false);
+    return;
+  }
+
+  try {
+    if (isSignUp) {
+      // ✅ Sign-up flow
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        formData.password
+      );
+
+      await updateProfile(userCredential.user, {
+        displayName: formData.username || normalizedEmail.split("@")[0],
+      });
+
+      const user: User = {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email!,
+        name:
+          userCredential.user.displayName?.trim() ||
+          formData.username.trim() ||
+          userCredential.user.email!.split("@")[0],
+      };
+
+      onLogin(user);
+    } else {
+      // ✅ Try logging in directly
+      try {
+        const userCredential = await signInWithEmailAndPassword(
+          auth,
+          normalizedEmail,
+          formData.password
+        );
+
+        const user: User = {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email!,
+          name:
+            userCredential.user.displayName ||
+            userCredential.user.email!.split("@")[0],
+        };
+
+        onLogin(user);
+      } catch (err: any) {
+        console.error("Login error:", err);
+
+        // ✅ Handle specific login failures
+        if (
+          err.code === "auth/invalid-credential" ||
+          err.code === "auth/wrong-password" ||
+          err.code === "auth/user-not-found"
+        ) {
+          setError("Please check your email or password credential.");
+        } else if (err.code === "auth/invalid-email") {
+          setError("Please enter a valid email address.");
+        } else if (err.code === "auth/too-many-requests") {
+          setError("Too many failed attempts. Please try again later.");
+        } else {
+          setError(err.message || "Something went wrong. Please try again.");
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("Global error:", err);
+    
+    // ✅ Handle sign-up specific errors
+    if (err.code === "auth/email-already-in-use") {
+      setError("This email is already registered. Please sign in instead.");
+    } else if (err.code === "auth/weak-password") {
+      setError("Password is too weak. Please use a stronger password.");
+    } else {
+      setError(err.message || "Something went wrong. Please try again.");
+    }
+  } finally {
+    setLoading(false);
+  }
 };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
@@ -127,18 +173,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
             <form onSubmit={handleSubmit} className="space-y-6">
               {isSignUp && (
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                    Username
                   </label>
                   <input
                     type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
+                    id="username"
+                    name="username"
+                    value={formData.username}
                     onChange={handleInputChange}
                     required={isSignUp}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="Enter your full name"
+                    placeholder="Enter your username"
                   />
                 </div>
               )}
@@ -210,6 +256,29 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
                 {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
               </button>
             </form>
+
+            {!isSignUp && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!formData.email) {
+                      setError("Please enter your email address first.");
+                      return;
+                    }
+                    try {
+                      await sendPasswordResetEmail(auth, formData.email.trim().toLowerCase());
+                      setError("Password reset email sent. Please check your inbox.");
+                    } catch {
+                      setError("Unable to send reset email. Please try again later.");
+                    }
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 mt-2"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             <div className="mt-6 text-center">
               <p className="text-gray-600">
