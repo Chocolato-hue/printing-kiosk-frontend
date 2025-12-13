@@ -51,6 +51,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
   // Track upload completion
   const [uploadCompleted, setUploadCompleted] = useState(false);
   const [compressionNotice, setCompressionNotice] = useState<string>('');
+  const [printerLocked, setPrinterLocked] = useState(false);
+
 
   // 🖨️ Load available printers from Firestore
   useEffect(() => {
@@ -58,12 +60,33 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
       const printerList = await fetchAvailablePrinters();
       setPrinters(printerList);
 
-      // Restore previously selected printer (if user picked one before)
       const saved = localStorage.getItem("selectedPrinter");
-      if (saved) setSelectedPrinter(saved);
+      if (saved) {
+        const exists = printerList.some(p => p.id === saved);
+        if (exists) {
+          setSelectedPrinter(saved);
+        } else {
+          // invalid printer → clear it
+          localStorage.removeItem("selectedPrinter");
+          setSelectedPrinter("");
+          setPrinterLocked(false);
+        }
+      }
     }
     loadPrinters();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const printerIdFromQR = params.get("printerId");
+
+    if (printerIdFromQR) {
+      setSelectedPrinter(printerIdFromQR);
+      localStorage.setItem("selectedPrinter", printerIdFromQR);
+      setPrinterLocked(true); // 🔒 lock dropdown
+    }
+  }, []);
+
 
   const MAX_FILE_SIZE_MB = 2;
   const MAX_WIDTH = 1748;
@@ -169,19 +192,26 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
 
   const handleProceedToPayment = () => {
     if (!uploadedFile || !selectedSize) return;
+
+    if (!selectedPrinter) {
+      alert("Please select a printer before continuing.");
+      return;
+    }
+
     if (!uploadCompleted) {
       alert("Please wait until the upload is complete.");
       return;
     }
+
     if (!imageUrl) {
       alert("Error: Image URL not ready. Cannot proceed.");
       return;
     }
-    // ✅ Save upload data so the next page (LayoutSelectionPage) can access it
+
     localStorage.setItem("uploadedImageUrl", imageUrl);
     localStorage.setItem("uploadedFileName", uploadedFile?.name || "");
+    localStorage.setItem("selectedPrinter", selectedPrinter); // ✅ already doing this
 
-    // ✅ Move to layout selection page instead of payment
     onProceedToLayout();
   };
 
@@ -314,12 +344,15 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
                 <div className="space-y-2">
                   <select
                     value={selectedPrinter}
+                    disabled={printerLocked}
                     onChange={(e) => {
                       const id = e.target.value;
                       setSelectedPrinter(id);
                       localStorage.setItem("selectedPrinter", id);
                     }}
-                    className="w-full border border-gray-300 rounded-lg p-2"
+                    className={`w-full border border-gray-300 rounded-lg p-2 ${
+                    printerLocked ? "bg-gray-100 cursor-not-allowed" : ""
+                  }`}
                   >
                     <option value="">-- Choose Printer --</option>
                     {printers.map((printer) => (
@@ -328,7 +361,16 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
                       </option>
                     ))}
                   </select>
-
+                  {printerLocked && (
+                    <p className="text-sm text-green-600">
+                      Printer auto-selected via QR code
+                    </p>
+                  )}
+                  {!selectedPrinter && (
+                    <p className="text-sm text-red-600">
+                      Please choose a printer to continue
+                    </p>
+                  )}
                   {selectedPrinter && (
                     <p className="text-sm text-gray-600">
                       Selected printer:{" "}
@@ -365,7 +407,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
                 
                 <button
                   onClick={handleProceedToPayment}
-                  disabled={!uploadCompleted} // ✅ disable until upload finishes
+                  disabled={!uploadCompleted || !selectedPrinter}
                   //disabled={!isResolutionSufficient(selectedSize)} = can print despite low resolution
                   className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
