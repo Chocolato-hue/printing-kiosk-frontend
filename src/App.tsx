@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import HomePage from './components/HomePage';
 import AuthPage from './components/AuthPage';
 import UploadPage from './pages/UploadPage';
@@ -11,6 +11,17 @@ function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'auth' | 'selectMode' | 'uploadSingle' | 'uploadMultiple'| 'layoutSelect'>('home');
   const [user, setUser] = useState<User | null>(null);
   const [selectedLayout, setSelectedLayout] = useState<'fullA5' | 'two4x6' | null>(null);
+
+  useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const printerId = params.get("printerId");
+
+  if (printerId) {
+    localStorage.setItem("selectedPrinter", printerId);
+    setCurrentPage("uploadSingle"); // 🚀 force jump
+  }
+}, []);
+
 
   const handleLogin = (userData: User) => {
     setUser(userData);
