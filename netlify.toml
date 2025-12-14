@@ -1,3 +1,13 @@
 
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "VITE_FIREBASE_APP_ID,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_STORAGE_BUCKET,VITE_FIREBASE_API_KEY, VITE_FIREBASE_MESSAGING_SENDER_ID"
+
+[build]
+  command = "npm run build"    # Run Vite build
+  publish = "dist"             # Folder to serve
+
+[[redirects]]
+  from = "/*"                  # Catch all unknown paths
+  to = "/index.html"           # Serve SPA entry point
+  status = 200                 # Treat as a normal page load
+  force = true                 # Always use this redirectg
