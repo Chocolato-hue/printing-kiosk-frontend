@@ -10,4 +10,3 @@
   from = "/*"                  # Catch all unknown paths
   to = "/index.html"           # Serve SPA entry point
   status = 200                 # Treat as a normal page load
-  force = true                 # Always use this redirectg
