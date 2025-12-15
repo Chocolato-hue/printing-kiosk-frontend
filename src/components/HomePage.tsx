@@ -1,14 +1,10 @@
 import React from 'react';
-import { Camera, Upload, CreditCard, Truck, Star, ArrowRight, LogOut } from 'lucide-react';
-import { User } from '../types/User';
+import { Camera, Upload, CreditCard, Truck, Star, ArrowRight } from 'lucide-react';
+import { useNavigate } from "react-router-dom";
 
-interface HomePageProps {
-  onGetStarted: () => void;
-  user: User | null;
-  onLogout: () => void;
-}
+const HomePage: React.FC = () => {
+  const navigate = useNavigate();
 
-const HomePage: React.FC<HomePageProps> = ({ onGetStarted, user, onLogout }) => {
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -19,27 +15,13 @@ const HomePage: React.FC<HomePageProps> = ({ onGetStarted, user, onLogout }) => 
               <Camera className="h-8 w-8 text-blue-600" />
               <span className="text-2xl font-bold text-gray-900">PrintPro</span>
             </div>
-            <div className="flex items-center space-x-4">
-              {user ? (
-                <div className="flex items-center space-x-3">
-                  <span className="text-gray-700">Welcome, {user.name}</span>
-                  <button
-                    onClick={onLogout}
-                    className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 transition-colors"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    <span>Logout</span>
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={onGetStarted}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Get Started
-                </button>
-              )}
-            </div>
+
+            <button
+              onClick={() => navigate("/select-mode")}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Get Started
+            </button>
           </div>
         </div>
       </header>
@@ -57,7 +39,7 @@ const HomePage: React.FC<HomePageProps> = ({ onGetStarted, user, onLogout }) => 
               Perfect for preserving memories, gifts, and professional presentations.
             </p>
             <button
-              onClick={onGetStarted}
+              onClick={() => navigate("/select-mode")}
               className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-all transform hover:scale-105 inline-flex items-center space-x-2"
             >
               <span>Start Printing Now</span>
@@ -151,7 +133,7 @@ const HomePage: React.FC<HomePageProps> = ({ onGetStarted, user, onLogout }) => 
           <h2 className="text-3xl font-bold text-white mb-4">Ready to Print Your Photos?</h2>
           <p className="text-blue-100 text-lg mb-8">Join thousands of satisfied customers who trust PrintPro</p>
           <button
-            onClick={onGetStarted}
+            onClick={() => navigate("/select-mode")}
             className="bg-white text-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-gray-100 transition-all transform hover:scale-105 inline-flex items-center space-x-2"
           >
             <span>Get Started Today</span>

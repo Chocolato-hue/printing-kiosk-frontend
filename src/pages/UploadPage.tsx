@@ -1,20 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Upload, Camera, AlertCircle, Check, X } from 'lucide-react';
-import { User } from '../types/User';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Camera, AlertCircle } from 'lucide-react';
 import { PrintSize, PrintOrder } from '../types/PrintOrder';
 import ImageUpload from '../components/ImageUpload';
 import PrintSizeSelector from '../components/PrintSizeSelector';
 import PrintModal from '../components/PrintModal';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject} from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
-import { submitPrintJob, getConnectedPrinter, fetchAvailablePrinters } from '../services/PrinterService';
+import { fetchAvailablePrinters } from '../services/PrinterService';
+import { useNavigate } from "react-router-dom";
+import { User } from '../types/User';
 
-// ...
-interface UploadPageProps {
-  user: User | null;
-  onBack: () => void;
-  onProceedToLayout: () => void; // 👈 add this line
-}
+const UploadPage = ({ user }: { user?: User | null }) => {
+  const navigate = useNavigate();
 
 // ✅ Force frontend to only allow A5 prints
 const printSizes: PrintSize[] = [
@@ -27,7 +24,6 @@ const printSizes: PrintSize[] = [
   }
 ];
 
-const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<PrintSize | null>({
@@ -212,7 +208,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
     localStorage.setItem("uploadedFileName", uploadedFile?.name || "");
     localStorage.setItem("selectedPrinter", selectedPrinter); // ✅ already doing this
 
-    onProceedToLayout();
+    navigate("/layout-select");
   };
 
   const handlePrintComplete = () => {
@@ -236,7 +232,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center space-x-4">
               <button
-                onClick={onBack}
+                onClick={() => navigate(-1)}
                 className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -248,7 +244,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ user, onBack, onProceedToLayout
               </div>
             </div>
             <div className="text-gray-700">
-              Welcome, {user?.name}
+              Welcome{user?.name ? `, ${user.name}` : ""}
             </div>
           </div>
         </div>
