@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Camera, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ArrowLeft, Upload, Camera, AlertCircle, Check, X } from 'lucide-react';
+import { User } from '../types/User';
 import { PrintSize, PrintOrder } from '../types/PrintOrder';
 import ImageUpload from '../components/ImageUpload';
 import PrintSizeSelector from '../components/PrintSizeSelector';
 import PrintModal from '../components/PrintModal';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject} from 'firebase/storage';
 import { storage } from '../firebase-config'; // Import the initialized storage instance
-import { fetchAvailablePrinters } from '../services/PrinterService';
-import { useNavigate } from "react-router-dom";
-import { User } from '../types/User';
+import { submitPrintJob, getConnectedPrinter, fetchAvailablePrinters } from '../services/PrinterService';
+import { useNavigate } from 'react-router-dom';
 
-const UploadPage = ({ user }: { user?: User | null }) => {
-  const navigate = useNavigate();
+
+// ...
+interface UploadPageProps {
+  user: User | null;
+}
 
 // ✅ Force frontend to only allow A5 prints
 const printSizes: PrintSize[] = [
@@ -24,6 +27,8 @@ const printSizes: PrintSize[] = [
   }
 ];
 
+const UploadPage: React.FC<UploadPageProps> = ({ user}) => {
+  const navigate = useNavigate();
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<PrintSize | null>({
@@ -208,7 +213,7 @@ const printSizes: PrintSize[] = [
     localStorage.setItem("uploadedFileName", uploadedFile?.name || "");
     localStorage.setItem("selectedPrinter", selectedPrinter); // ✅ already doing this
 
-    navigate("/layout-select");
+    navigate('/layout');
   };
 
   const handlePrintComplete = () => {
@@ -244,7 +249,7 @@ const printSizes: PrintSize[] = [
               </div>
             </div>
             <div className="text-gray-700">
-              Welcome{user?.name ? `, ${user.name}` : ""}
+              Welcome, {user?.name}
             </div>
           </div>
         </div>

@@ -7,13 +7,14 @@ import {
   signInWithEmailAndPassword,
   updateProfile, sendPasswordResetEmail
 } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 
 interface AuthPageProps {
   onLogin: (user: User) => void;
-  onBack: () => void;
 }
 
-const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
+const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
+  const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -71,6 +72,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
       };
 
       onLogin(user);
+      navigate('/mode'); // or '/upload' if you want to skip mode
     } else {
       // ✅ Try logging in directly
       try {
@@ -89,6 +91,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
         };
 
         onLogin(user);
+        navigate('/mode'); // or '/upload' if you want to skip mode
       } catch (err: any) {
         console.error("Login error:", err);
 
@@ -137,7 +140,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onBack }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center py-4">
             <button
-              onClick={onBack}
+              onClick={() => navigate(-1)}
               className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
